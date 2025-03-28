@@ -87,6 +87,164 @@ const wss = new WebSocket.Server({
 const clients = new Map();
 let nextClientId = 1;
 
+// Game rooms management
+const gameRooms = new Map();
+const clientToRoom = new Map();
+
+/**
+ * Generate a random 6-character game code
+ * @returns {string} A random 6-character game code
+ */
+function generateGameCode() {
+  const characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Omitting confusable characters like I, 1, O, 0
+  let result = "";
+  for (let i = 0; i < 6; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return result;
+}
+
+/**
+ * Create a new game room
+ * @param {WebSocket} hostWs - The WebSocket of the host
+ * @returns {Object} The newly created game room
+ */
+function createGameRoom(hostWs) {
+  const hostClient = clients.get(hostWs);
+  if (!hostClient) return null;
+
+  // Generate a unique game code
+  let gameCode;
+  do {
+    gameCode = generateGameCode();
+  } while (gameRooms.has(gameCode));
+
+  // Create the room
+  const room = {
+    code: gameCode,
+    host: hostWs,
+    hostId: hostClient.id,
+    guest: null,
+    guestId: null,
+    status: "waiting", // waiting, playing, ended
+    created: Date.now(),
+  };
+
+  // Store the room
+  gameRooms.set(gameCode, room);
+  clientToRoom.set(hostWs, gameCode);
+
+  console.log(
+    `Created game room ${gameCode} hosted by Player ${hostClient.id}`
+  );
+
+  // Send confirmation to host
+  const message = {
+    type: "gameCreated",
+    gameCode: gameCode,
+    playerId: hostClient.id,
+    isHost: true,
+  };
+
+  hostWs.send(JSON.stringify(message));
+
+  return room;
+}
+
+/**
+ * Join an existing game room
+ * @param {WebSocket} guestWs - The WebSocket of the guest
+ * @param {string} gameCode - The game code to join
+ * @returns {boolean} Whether the join was successful
+ */
+function joinGameRoom(guestWs, gameCode) {
+  const guestClient = clients.get(guestWs);
+  if (!guestClient) return false;
+
+  // Check if room exists and is waiting
+  const room = gameRooms.get(gameCode);
+  if (!room || room.status !== "waiting" || room.guest !== null) {
+    const errorMessage = {
+      type: "error",
+      message: room
+        ? "Game is already full or not in waiting state"
+        : "Game not found",
+    };
+    guestWs.send(JSON.stringify(errorMessage));
+    return false;
+  }
+
+  // Add guest to room
+  room.guest = guestWs;
+  room.guestId = guestClient.id;
+  room.status = "playing";
+  clientToRoom.set(guestWs, gameCode);
+
+  console.log(`Player ${guestClient.id} joined game room ${gameCode}`);
+
+  // Notify both players
+  // Notify guest
+  const guestMessage = {
+    type: "gameJoined",
+    gameCode: gameCode,
+    playerId: guestClient.id,
+    opponentId: room.hostId,
+    isHost: false,
+  };
+  guestWs.send(JSON.stringify(guestMessage));
+
+  // Notify host
+  const hostMessage = {
+    type: "playerJoined",
+    gameCode: gameCode,
+    opponentId: guestClient.id,
+  };
+  room.host.send(JSON.stringify(hostMessage));
+
+  // Initialize both clients' game states
+  sendGameState(room.host);
+  sendGameState(room.guest);
+
+  return true;
+}
+
+/**
+ * Handle client disconnection from a game room
+ * @param {WebSocket} ws - The WebSocket of the disconnected client
+ */
+function handleRoomDisconnection(ws) {
+  const gameCode = clientToRoom.get(ws);
+  if (!gameCode) return;
+
+  const room = gameRooms.get(gameCode);
+  if (!room) {
+    clientToRoom.delete(ws);
+    return;
+  }
+
+  // Notify the other player if there is one
+  if (room.host === ws && room.guest) {
+    const message = {
+      type: "opponentDisconnected",
+      reason: "Host left the game",
+    };
+    room.guest.send(JSON.stringify(message));
+    clientToRoom.delete(room.guest);
+  } else if (room.guest === ws && room.host) {
+    const message = {
+      type: "opponentDisconnected",
+      reason: "Guest left the game",
+    };
+    room.host.send(JSON.stringify(message));
+    clientToRoom.delete(room.host);
+  }
+
+  // Clean up room
+  gameRooms.delete(gameCode);
+  clientToRoom.delete(ws);
+  console.log(`Game room ${gameCode} closed due to player disconnection`);
+}
+
 /**
  * Create an empty board array
  * @returns {Array} 2D array filled with zeros
@@ -213,91 +371,126 @@ function sendGameState(ws) {
 }
 
 /**
- * Broadcast a player's board state to all other players
+ * Broadcast a player's board state to their opponent in the same game room
  * @param {WebSocket} activeWs - The active player's WebSocket connection
  */
 function broadcastOpponentState(activeWs) {
   const activeClient = clients.get(activeWs);
   if (!activeClient) return;
 
-  // Iterate through all connected clients
-  clients.forEach((clientData, ws) => {
-    // Skip the active player
-    if (ws === activeWs) return;
+  // Find the game room and opponent
+  const gameCode = clientToRoom.get(activeWs);
+  if (!gameCode) return;
 
-    // Send the active player's state to other clients
-    const message = {
-      type: "opponentUpdate",
-      playerId: activeClient.id,
-      board: activeClient.state.board,
-      score: activeClient.state.score,
-      linesCleared: activeClient.state.linesCleared,
-      gameOver: activeClient.state.gameOver,
-    };
+  const room = gameRooms.get(gameCode);
+  if (!room || room.status !== "playing") return;
 
-    try {
-      ws.send(JSON.stringify(message));
-    } catch (error) {
-      console.error(
-        `Error sending opponent update to client ${clientData.id}:`,
-        error
-      );
-    }
-  });
+  // Determine the opponent's WebSocket
+  let opponentWs;
+  if (room.host === activeWs) {
+    opponentWs = room.guest;
+  } else if (room.guest === activeWs) {
+    opponentWs = room.host;
+  } else {
+    return; // Not in this room
+  }
+
+  if (!opponentWs) return;
+
+  // Send the active player's state to the opponent
+  const message = {
+    type: "opponentUpdate",
+    playerId: activeClient.id,
+    board: activeClient.state.board,
+    score: activeClient.state.score,
+    linesCleared: activeClient.state.linesCleared,
+    gameOver: activeClient.state.gameOver,
+  };
+
+  try {
+    opponentWs.send(JSON.stringify(message));
+  } catch (error) {
+    console.error(`Error sending opponent update to client:`, error);
+  }
 }
 
 // Listen for the 'listening' event
 wss.on("listening", () => {
-  console.log(`WebSocket server started on port ${PORT}`);
+  console.log(`Tetris server running on port ${PORT}`);
 });
 
 // Client connection handler
 wss.on("connection", (ws) => {
-  // Assign a unique ID to this client
+  console.log("New client connected");
+
+  // Assign a unique ID to the client
   const clientId = nextClientId++;
 
   // Initialize client state
-  const clientState = createInitialState(clientId);
+  clients.set(ws, {
+    id: clientId,
+    state: createInitialState(clientId),
+  });
 
-  // Store the client's state and WebSocket connection
-  clients.set(ws, { id: clientId, state: clientState });
+  // Send welcome message with client ID
+  ws.send(
+    JSON.stringify({
+      type: "welcome",
+      id: clientId,
+      message: `Welcome, Player ${clientId}!`,
+    })
+  );
 
-  console.log(`Client connected. Assigned ID: ${clientId}`);
-
-  // Send initial game state to client
-  sendGameState(ws);
-
-  // Set up message handler
+  // Handle messages from clients
   ws.on("message", (message) => {
     try {
-      // Parse the incoming message as JSON
-      const data = JSON.parse(message);
-      console.log(`Client ${clientId} sent:`, data);
+      const parsedMessage = JSON.parse(message);
+      console.log(`Received from Player ${clientId}:`, parsedMessage.type);
 
-      // Retrieve the client's state
-      const clientData = clients.get(ws);
-      if (!clientData) return;
+      // Handle different message types
+      switch (parsedMessage.type) {
+        case "createGame":
+          createGameRoom(ws);
+          break;
 
-      const state = clientData.state;
+        case "joinGame":
+          if (parsedMessage.gameCode) {
+            joinGameRoom(ws, parsedMessage.gameCode);
+          }
+          break;
 
-      // Process based on message type
-      processAction(ws, data);
+        case "cancelGame":
+          handleRoomDisconnection(ws);
+          break;
+
+        case "requestGameStart":
+          // Start the game if in a room
+          const gameCode = clientToRoom.get(ws);
+          if (gameCode) {
+            const room = gameRooms.get(gameCode);
+            if (room && room.status === "playing") {
+              sendGameState(ws);
+            }
+          } else {
+            // Single player mode is handled client-side
+            sendGameState(ws);
+          }
+          break;
+
+        // Handle gameplay messages (moveLeft, moveRight, etc.)
+        default:
+          processAction(ws, parsedMessage);
+      }
     } catch (error) {
       console.error("Error processing message:", error);
     }
   });
 
-  // Set up disconnect handler
+  // Handle client disconnection
   ws.on("close", () => {
     console.log(`Client ${clientId} disconnected`);
-
-    // Remove client from the map
+    handleRoomDisconnection(ws);
     clients.delete(ws);
-  });
-
-  // Set up error handler
-  ws.on("error", (error) => {
-    console.error(`Client ${clientId} WebSocket error:`, error);
   });
 });
 
@@ -428,44 +621,57 @@ function processLock(ws, state) {
 }
 
 /**
- * Send garbage lines to all opponents
- * @param {WebSocket} senderWs - The WebSocket of the player who cleared lines
- * @param {number} numLines - The number of garbage lines to send
+ * Send garbage lines to the opponent
+ * @param {WebSocket} senderWs - The WebSocket of the sender
+ * @param {number} numLines - Number of garbage lines to send
  */
 function sendGarbageToOpponents(senderWs, numLines) {
-  const sender = clients.get(senderWs);
-  if (!sender || numLines <= 0) return;
+  if (numLines <= 0) return;
 
-  // Iterate through all connected clients
-  clients.forEach((clientData, ws) => {
-    // Skip the sender
-    if (ws === senderWs) return;
+  const senderClient = clients.get(senderWs);
+  if (!senderClient) return;
 
-    // Skip clients whose game is over
-    if (clientData.state.gameOver) return;
+  // Find opponent in the same game room
+  const gameCode = clientToRoom.get(senderWs);
+  if (!gameCode) return;
 
-    // Send the garbage lines message
-    const message = {
-      type: "addGarbage",
-      lines: numLines,
-      fromPlayer: sender.id,
-    };
+  const room = gameRooms.get(gameCode);
+  if (!room || room.status !== "playing") return;
 
-    try {
-      ws.send(JSON.stringify(message));
+  // Determine the opponent
+  let opponentWs;
+  if (room.host === senderWs) {
+    opponentWs = room.guest;
+  } else if (room.guest === senderWs) {
+    opponentWs = room.host;
+  } else {
+    return; // Not in this room
+  }
 
-      // Also add the garbage to their game state
-      addGarbageLines(clientData.state, numLines);
+  if (!opponentWs) return;
 
-      // Update their game state
-      sendGameState(ws);
-    } catch (error) {
-      console.error(
-        `Error sending garbage lines to client ${clientData.id}:`,
-        error
-      );
-    }
-  });
+  const opponentClient = clients.get(opponentWs);
+  if (!opponentClient) return;
+
+  // Send garbage lines to the opponent
+  const garbageMessage = {
+    type: "addGarbage",
+    lines: numLines,
+    fromPlayer: senderClient.id,
+  };
+
+  try {
+    opponentWs.send(JSON.stringify(garbageMessage));
+    console.log(
+      `Player ${senderClient.id} sent ${numLines} garbage lines to Player ${opponentClient.id}`
+    );
+
+    // Also update the opponent's game state on the server
+    addGarbageLines(opponentClient.state, numLines);
+    sendGameState(opponentWs);
+  } catch (error) {
+    console.error("Error sending garbage lines:", error);
+  }
 }
 
 /**

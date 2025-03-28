@@ -13,8 +13,53 @@
   </head>
   <body>
     <div class="game-container">
-      <canvas id="tetrisCanvas"></canvas>
-      <div id="opponentInfo"></div>
+      <div id="menu-screen" class="menu-screen">
+        <h1>Multiplayer Tetris</h1>
+        <div class="menu-options">
+          <button id="createGameBtn" class="menu-button">
+            Create New Game
+          </button>
+          <div class="join-game-container">
+            <input
+              type="text"
+              id="gameCodeInput"
+              placeholder="Enter Game Code"
+              maxlength="6"
+            />
+            <button id="joinGameBtn" class="menu-button">Join Game</button>
+          </div>
+          <button id="singlePlayerBtn" class="menu-button">
+            Single Player
+          </button>
+        </div>
+      </div>
+
+      <div id="waiting-screen" class="waiting-screen hidden">
+        <h2>Waiting for Player 2</h2>
+        <p>Share this game code with a friend:</p>
+        <div class="game-code" id="gameCodeDisplay">------</div>
+        <button id="cancelGameBtn" class="menu-button">Cancel</button>
+      </div>
+
+      <div id="game-screen" class="hidden">
+        <div class="game-status" id="gameStatus">
+          <span id="playerStatus">You: Player 1</span>
+          <span id="gameCode" class="game-code-small"></span>
+        </div>
+        <div class="game-boards">
+          <div class="board-container">
+            <h3>Your Board</h3>
+            <canvas id="tetrisCanvas"></canvas>
+          </div>
+          <div id="opponentInfo" class="board-container">
+            <h3>Opponent's Board</h3>
+            <!-- Opponent canvas will be added dynamically -->
+          </div>
+        </div>
+        <div class="game-controls">
+          <p>Controls: Arrow keys to move, Up to rotate</p>
+        </div>
+      </div>
     </div>
     <script src="client.js"></script>
   </body>

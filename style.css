@@ -2,7 +2,8 @@ body {
   margin: 0;
   padding: 0;
   font-family: Arial, sans-serif;
-  background-color: #f0f0f0;
+  background-color: #111;
+  color: white;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -11,8 +12,133 @@ body {
 
 .game-container {
   display: flex;
-  gap: 20px;
   position: relative;
+  width: 100%;
+  max-width: 1000px;
+  min-height: 600px;
+  background-color: #222;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Menu Screen */
+.menu-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 40px;
+  text-align: center;
+}
+
+.menu-screen h1 {
+  font-size: 3em;
+  margin-bottom: 40px;
+  color: #00ffff;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+}
+
+.menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.menu-button {
+  background-color: #333;
+  color: white;
+  border: none;
+  padding: 15px 20px;
+  font-size: 1em;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.menu-button:hover {
+  background-color: #444;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.join-game-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#gameCodeInput {
+  padding: 15px;
+  font-size: 1em;
+  border: none;
+  border-radius: 5px;
+  background-color: #444;
+  color: white;
+  text-align: center;
+}
+
+/* Waiting Screen */
+.waiting-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 40px;
+  text-align: center;
+}
+
+.game-code {
+  background-color: #333;
+  font-size: 2em;
+  padding: 10px 20px;
+  margin: 20px 0;
+  border-radius: 5px;
+  letter-spacing: 5px;
+  font-weight: bold;
+  color: #00ffff;
+}
+
+.game-code-small {
+  background-color: #333;
+  font-size: 0.9em;
+  padding: 5px 10px;
+  border-radius: 5px;
+  color: #00ffff;
+}
+
+/* Game Screen */
+#game-screen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 20px;
+}
+
+.game-status {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: #333;
+  border-radius: 5px;
+}
+
+.game-boards {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.board-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 #tetrisCanvas {
@@ -22,7 +148,7 @@ body {
 }
 
 #opponentInfo {
-  width: 200px;
+  width: 100%;
   border: 2px solid #333;
   background-color: #222;
   color: white;
@@ -38,9 +164,19 @@ body {
   border: 1px solid #333;
 }
 
+.game-controls {
+  margin-top: 20px;
+  text-align: center;
+  color: #aaa;
+}
+
 .game-over {
   color: red;
   font-weight: bold;
+}
+
+.hidden {
+  display: none !important;
 }
 
 @keyframes fadeOut {
@@ -57,4 +193,8 @@ body {
 
 .garbage-warning {
   animation: fadeOut 2s forwards;
+}
+
+.notification {
+  transition: opacity 1s ease;
 }

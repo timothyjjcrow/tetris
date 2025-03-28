@@ -33,14 +33,6 @@ const SCORE_VALUES = {
   4: 800, // 4 lines: 800 points (Tetris)
 };
 
-// WebSocket Setup
-const socket = new WebSocket(WEBSOCKET_URL);
-
-// Connection opened
-socket.onopen = (event) => {
-  console.log("Connected to the game server");
-};
-
 // Game State Variables
 let currentPiece = null;
 let currentX = 0;
@@ -50,6 +42,7 @@ let lastDropTime = 0;
 let gameStarted = false;
 let score = 0;
 let linesCleared = 0;
+let playerId = null;
 
 // Opponent state
 let opponentBoard = [];
@@ -57,6 +50,54 @@ let opponentScore = 0;
 let opponentLines = 0;
 let opponentId = null;
 let opponentGameOver = false;
+
+// Multiplayer state
+let isHost = false;
+let gameCode = null;
+let isWaitingForOpponent = false;
+
+// UI Elements
+const menuScreen = document.getElementById("menu-screen");
+const waitingScreen = document.getElementById("waiting-screen");
+const gameScreen = document.getElementById("game-screen");
+const createGameBtn = document.getElementById("createGameBtn");
+const joinGameBtn = document.getElementById("joinGameBtn");
+const singlePlayerBtn = document.getElementById("singlePlayerBtn");
+const gameCodeInput = document.getElementById("gameCodeInput");
+const gameCodeDisplay = document.getElementById("gameCodeDisplay");
+const gameCodeSmall = document.getElementById("gameCode");
+const cancelGameBtn = document.getElementById("cancelGameBtn");
+const playerStatus = document.getElementById("playerStatus");
+
+// WebSocket Setup
+const socket = new WebSocket(WEBSOCKET_URL);
+
+// Connection opened
+socket.onopen = (event) => {
+  console.log("Connected to the game server");
+
+  // Enable the menu buttons once connection is established
+  if (createGameBtn) createGameBtn.disabled = false;
+  if (joinGameBtn) joinGameBtn.disabled = false;
+  if (singlePlayerBtn) singlePlayerBtn.disabled = false;
+};
+
+// Connection closed
+socket.onclose = (event) => {
+  console.log("Disconnected from the game server");
+  if (!event.wasClean) {
+    console.warn("Connection closed unexpectedly");
+    window.singlePlayerMode = true; // Immediately set single-player mode
+    enableSinglePlayerMode();
+  }
+};
+
+// Connection error
+socket.onerror = (error) => {
+  console.error("WebSocket error:", error);
+  window.singlePlayerMode = true; // Immediately set single-player mode
+  enableSinglePlayerMode();
+};
 
 // Listen for messages from the server
 socket.onmessage = (event) => {
@@ -66,6 +107,46 @@ socket.onmessage = (event) => {
 
     // Handle different message types
     switch (message.type) {
+      case "welcome":
+        // Store player ID
+        playerId = message.id;
+        break;
+
+      case "gameCreated":
+        // Handle new game created
+        gameCode = message.gameCode;
+        isHost = message.isHost;
+        isWaitingForOpponent = true;
+        showWaitingScreen(gameCode);
+        break;
+
+      case "gameJoined":
+        // Handle joining an existing game
+        gameCode = message.gameCode;
+        isHost = message.isHost;
+        opponentId = message.opponentId;
+        showGameScreen(gameCode);
+        break;
+
+      case "playerJoined":
+        // Host is notified when a player joins
+        opponentId = message.opponentId;
+        isWaitingForOpponent = false;
+        showGameScreen(gameCode);
+        break;
+
+      case "error":
+        // Display error message
+        showNotification(message.message, "error");
+        break;
+
+      case "opponentDisconnected":
+        // Handle opponent disconnection
+        showNotification(message.reason, "warning");
+        opponentGameOver = true;
+        updateOpponentDisplay();
+        break;
+
       case "gameStateUpdate":
         // Update local game state with server state
         updateGameState(message.state);
@@ -92,40 +173,27 @@ socket.onmessage = (event) => {
   }
 };
 
-// Connection closed
-socket.onclose = (event) => {
-  console.log("Disconnected from the game server");
-  if (!event.wasClean) {
-    console.warn("Connection closed unexpectedly");
-    window.singlePlayerMode = true; // Immediately set single-player mode
-    enableSinglePlayerMode();
-  }
-};
-
-// Connection error
-socket.onerror = (error) => {
-  console.error("WebSocket error:", error);
-  window.singlePlayerMode = true; // Immediately set single-player mode
-  enableSinglePlayerMode();
-};
-
 /**
- * Enables single-player mode when WebSocket connection fails
+ * Shows a notification message to the user
+ * @param {string} message - The message to display
+ * @param {string} type - The type of notification (info, error, warning)
  */
-function enableSinglePlayerMode() {
-  // Display a notification to the user
+function showNotification(message, type = "info") {
   const notification = document.createElement("div");
-  notification.className = "notification";
-  notification.innerHTML = `
-    <p>Unable to connect to multiplayer server.</p>
-    <p>You can continue playing in single-player mode.</p>
-  `;
+  notification.className = `notification ${type}`;
+  notification.innerHTML = `<p>${message}</p>`;
+
+  // Set styles based on notification type
+  let bgColor = "rgba(0, 0, 255, 0.7)"; // info
+  if (type === "error") bgColor = "rgba(255, 0, 0, 0.7)";
+  if (type === "warning") bgColor = "rgba(255, 165, 0, 0.7)";
+
   notification.style.cssText = `
     position: absolute;
     top: 10px;
     left: 50%;
     transform: translateX(-50%);
-    background-color: rgba(255, 0, 0, 0.7);
+    background-color: ${bgColor};
     color: white;
     padding: 10px 20px;
     border-radius: 5px;
@@ -140,9 +208,93 @@ function enableSinglePlayerMode() {
     notification.style.opacity = "0";
     setTimeout(() => notification.remove(), 1000);
   }, 5000);
+}
+
+/**
+ * Shows the waiting screen with the game code
+ * @param {string} code - The game code to display
+ */
+function showWaitingScreen(code) {
+  if (menuScreen) menuScreen.classList.add("hidden");
+  if (waitingScreen) {
+    waitingScreen.classList.remove("hidden");
+    if (gameCodeDisplay) gameCodeDisplay.textContent = code;
+  }
+  if (gameScreen) gameScreen.classList.add("hidden");
+}
+
+/**
+ * Shows the game screen and initializes the game
+ * @param {string} code - The game code to display
+ */
+function showGameScreen(code) {
+  if (menuScreen) menuScreen.classList.add("hidden");
+  if (waitingScreen) waitingScreen.classList.add("hidden");
+  if (gameScreen) {
+    gameScreen.classList.remove("hidden");
+    if (gameCodeSmall) gameCodeSmall.textContent = `Game: ${code}`;
+    if (playerStatus) playerStatus.textContent = `You: Player ${playerId}`;
+  }
+
+  // Initialize or restart the game
+  initializeBoard();
+  currentPiece = getRandomPiece();
+  currentX =
+    Math.floor(COLS / 2) - Math.floor(currentPiece.shape[0].length / 2);
+  currentY = 0;
+  score = 0;
+  linesCleared = 0;
+  lastDropTime = 0;
+  gameStarted = true;
+
+  // Start the game loop
+  requestAnimationFrame(gameLoop);
+}
+
+/**
+ * Enables single-player mode when WebSocket connection fails
+ */
+function enableSinglePlayerMode() {
+  // Display a notification to the user
+  showNotification(
+    "Unable to connect to multiplayer server. You can continue playing in single-player mode.",
+    "warning"
+  );
 
   // Set a flag indicating we're in single-player mode
   window.singlePlayerMode = true;
+
+  // Go directly to the game screen if we're not already there
+  if (gameScreen && gameScreen.classList.contains("hidden")) {
+    if (menuScreen) menuScreen.classList.add("hidden");
+    if (waitingScreen) waitingScreen.classList.add("hidden");
+    gameScreen.classList.remove("hidden");
+
+    // Update UI to show single player mode
+    if (playerStatus) playerStatus.textContent = "Single Player Mode";
+    if (gameCodeSmall) gameCodeSmall.textContent = "";
+
+    // Initialize the game
+    initializeGame();
+  }
+}
+
+/**
+ * Initialize the game for single player mode
+ */
+function initializeGame() {
+  initializeBoard();
+  currentPiece = getRandomPiece();
+  currentX =
+    Math.floor(COLS / 2) - Math.floor(currentPiece.shape[0].length / 2);
+  currentY = 0;
+  score = 0;
+  linesCleared = 0;
+  lastDropTime = 0;
+  gameStarted = true;
+
+  // Start the game loop
+  requestAnimationFrame(gameLoop);
 }
 
 // Helper function to send messages to the server
@@ -164,6 +316,86 @@ function sendMessage(message) {
   }
 }
 
+// Initialize UI Event Listeners
+function initializeUIListeners() {
+  // Create Game button
+  if (createGameBtn) {
+    createGameBtn.addEventListener("click", () => {
+      sendMessage({ type: "createGame" });
+    });
+  }
+
+  // Join Game button
+  if (joinGameBtn) {
+    joinGameBtn.addEventListener("click", () => {
+      const code = gameCodeInput.value.trim().toUpperCase();
+      if (code.length === 6) {
+        sendMessage({ type: "joinGame", gameCode: code });
+      } else {
+        showNotification("Please enter a valid 6-character game code", "error");
+      }
+    });
+  }
+
+  // Single Player button
+  if (singlePlayerBtn) {
+    singlePlayerBtn.addEventListener("click", () => {
+      window.singlePlayerMode = true;
+      showGameScreen("SINGLE");
+    });
+  }
+
+  // Cancel Game button
+  if (cancelGameBtn) {
+    cancelGameBtn.addEventListener("click", () => {
+      sendMessage({ type: "cancelGame" });
+      // Go back to menu
+      if (menuScreen) menuScreen.classList.remove("hidden");
+      if (waitingScreen) waitingScreen.classList.add("hidden");
+      if (gameScreen) gameScreen.classList.add("hidden");
+    });
+  }
+
+  // Init the game code input for easier entry
+  if (gameCodeInput) {
+    gameCodeInput.addEventListener("input", (e) => {
+      e.target.value = e.target.value.toUpperCase();
+    });
+  }
+}
+
+/**
+ * Connects to the WebSocket server
+ * Sets up the game in either multiplayer or single-player mode
+ */
+function connectToServer() {
+  // Check if WebSocket is actually open before trying to use it
+  if (socket.readyState === WebSocket.OPEN) {
+    console.log("WebSocket connection initialized");
+    // In multiplayer mode, we wait for the server to send us game state
+    sendMessage({ type: "requestGameStart" });
+    gameStarted = true;
+  } else if (socket.readyState === WebSocket.CONNECTING) {
+    console.log("WebSocket is connecting, waiting...");
+
+    // Set a timeout to check connection status after 2 seconds
+    setTimeout(() => {
+      if (socket.readyState !== WebSocket.OPEN) {
+        console.log(
+          "WebSocket connection timed out, starting in single-player mode"
+        );
+        window.singlePlayerMode = true;
+        gameStarted = true;
+      }
+    }, 2000);
+  } else {
+    // WebSocket is closed or closing
+    console.log("No WebSocket connection, starting in single-player mode");
+    window.singlePlayerMode = true;
+    gameStarted = true;
+  }
+}
+
 // Canvas Setup
 const canvas = document.getElementById("tetrisCanvas");
 const ctx = canvas.getContext("2d");
@@ -171,6 +403,9 @@ const ctx = canvas.getContext("2d");
 // Set canvas dimensions based on game grid
 canvas.width = COLS * BLOCK_SIZE;
 canvas.height = ROWS * BLOCK_SIZE;
+
+// Initialize UI event listeners
+initializeUIListeners();
 
 // Tetromino Definitions
 const TETROMINOES = {
@@ -723,52 +958,6 @@ function gameLoop(timestamp) {
 
 // Add event listener for keyboard input
 document.addEventListener("keydown", handleKeyPress);
-
-/**
- * Connects to the WebSocket server
- * Sets up the game in either multiplayer or single-player mode
- */
-function connectToServer() {
-  // Check if WebSocket is actually open before trying to use it
-  if (socket.readyState === WebSocket.OPEN) {
-    console.log("WebSocket connection initialized");
-    // In multiplayer mode, we wait for the server to send us game state
-    sendMessage({ type: "requestGameStart" });
-    gameStarted = true;
-  } else if (socket.readyState === WebSocket.CONNECTING) {
-    console.log("WebSocket is connecting, waiting...");
-
-    // Set a timeout to check connection status after 2 seconds
-    setTimeout(() => {
-      if (socket.readyState !== WebSocket.OPEN) {
-        console.log(
-          "WebSocket connection timed out, starting in single-player mode"
-        );
-        window.singlePlayerMode = true;
-        gameStarted = true;
-      }
-    }, 2000);
-  } else {
-    // WebSocket is closed or closing
-    console.log("No WebSocket connection, starting in single-player mode");
-    window.singlePlayerMode = true;
-    gameStarted = true;
-  }
-}
-
-// Initialize game
-initializeBoard();
-
-// Create initial piece
-currentPiece = getRandomPiece();
-currentX = Math.floor(COLS / 2) - Math.floor(currentPiece.shape[0].length / 2);
-currentY = 0;
-
-// Connect to server
-connectToServer();
-
-// Start the game loop
-requestAnimationFrame(gameLoop);
 
 /**
  * Updates the local game state from the server data
