@@ -1,0 +1,24 @@
+{
+  "name": "multiplayer-tetris",
+  "version": "1.0.0",
+  "description": "A simple multiplayer Tetris game using WebSockets",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "tetris",
+    "game",
+    "websockets",
+    "multiplayer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.1"
+  },
+  "engines": {
+    "node": "14.x"
+  }
+}

@@ -1,0 +1,53 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Meta Context Protocol File for Multiplayer Tetris App
+
+# Overall Goal:
+# Create a simple, functional, and extensible multiplayer Tetris web application.
+# The frontend should be vanilla JavaScript, HTML, and CSS.
+# The backend should be a Node.js server using the 'ws' library for WebSockets.
+# Prioritize clarity, simplicity, and modularity for future updates.
+
+# Core Technologies:
+# - Frontend: HTML5 (Canvas API), CSS3, Vanilla JavaScript (ES6+)
+# - Backend: Node.js
+# - Real-time Communication: WebSockets (using the 'ws' library)
+# - Avoid complex frameworks (like React, Vue, Angular) for the frontend unless specifically requested later.
+# - Avoid large game engines.
+
+# Code Style & Structure:
+# - Use clear and descriptive variable and function names.
+# - Employ functional decomposition: Break down logic into smaller, reusable functions.
+# - Add comments to explain complex logic or non-obvious code sections.
+# - Maintain consistent code formatting (e.g., indentation, spacing). Consider using Prettier defaults.
+# - Structure the project logically: Separate client-side code (e.g., `public/` or root) from server-side code (e.g., `server/` or root `server.js`).
+# - Frontend: Use distinct files for HTML (`index.html`), CSS (`style.css`), and JavaScript (`client.js`, potentially `game.js` for core logic).
+# - Backend: Keep the initial server logic within a single file (`server.js`) for simplicity, but structure it cleanly.
+
+# Functionality Priorities (Build Incrementally):
+# 1. Basic single-player Tetris logic in JavaScript (piece movement, rotation, collision, line clearing).
+# 2. Rendering the game state on an HTML Canvas.
+# 3. Setting up a basic Node.js WebSocket server (`ws`).
+# 4. Connecting the client to the WebSocket server.
+# 5. Sending player actions (move, rotate, drop) from the client to the server.
+# 6. Basic server-side game state management for two players (or a simple room).
+# 7. Broadcasting game state updates from the server to clients (e.g., opponent's board).
+# 8. Implementing a simple "garbage line" mechanic for multiplayer interaction.
+
+# Extensibility Considerations:
+# - Define game parameters (board size, piece shapes/colors) in configurable constants or objects.
+# - Structure message formats for WebSockets clearly (e.g., using JSON with a 'type' field).
+# - Keep game logic separate from rendering and networking code where feasible.
+
+# Deployment Considerations:
+# - The frontend assets (HTML, CSS, JS) should be static and easily deployable on Vercel.
+# - The Node.js WebSocket server will likely need separate hosting (e.g., Render free tier, Glitch). Ensure the client-side code can easily configure the WebSocket server URL. Do not assume Vercel serverless functions for the WebSocket server itself due to connection limitations.
+
+# Error Handling:
+# - Implement basic error handling, especially around WebSocket connections and message parsing. Log errors to the console.
+
+# Security:
+# - For this simple version, focus on functionality. Do not implement authentication or complex security measures unless specifically requested later. Be mindful of potential trivial cheating vectors (e.g., client-side validation only) but don't over-engineer prevention initially.
