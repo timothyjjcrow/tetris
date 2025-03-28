@@ -12,7 +12,7 @@
 // Otherwise, use the localhost development server
 const isProduction = window.location.protocol === "https:";
 const WEBSOCKET_URL = isProduction
-  ? "wss://YOUR-GLITCH-PROJECT-NAME.glitch.me" // REPLACE WITH YOUR ACTUAL GLITCH SERVER URL
+  ? "wss://https://repeated-fair-calendula.glitch.me/" // REPLACE WITH YOUR ACTUAL GLITCH SERVER URL
   : "ws://localhost:8080";
 
 console.log(`Using WebSocket URL: ${WEBSOCKET_URL}`);
