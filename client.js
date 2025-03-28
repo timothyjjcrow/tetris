@@ -7,10 +7,17 @@
 // - Remember to update WEBSOCKET_URL below to the deployed Glitch server's wss:// address.
 
 // WebSocket configuration
-const WEBSOCKET_URL = "ws://localhost:8080";
-// IMPORTANT: Before final deployment, change this URL to your deployed Glitch server address.
-// Find your Glitch project URL (e.g., https://your-project-name.glitch.me) and change this constant to:
-// const WEBSOCKET_URL = 'wss://your-project-name.glitch.me';
+// Automatically determine if we're in a production environment (like Vercel)
+// If window.location.protocol is 'https:', use a secure WebSocket connection
+// Otherwise, use the localhost development server
+const isProduction = window.location.protocol === "https:";
+const WEBSOCKET_URL = isProduction
+  ? "wss://YOUR-GLITCH-PROJECT-NAME.glitch.me" // REPLACE WITH YOUR ACTUAL GLITCH SERVER URL
+  : "ws://localhost:8080";
+
+console.log(`Using WebSocket URL: ${WEBSOCKET_URL}`);
+// IMPORTANT: Before final deployment, change the wss:// URL above to your deployed Glitch server address.
+// Find your Glitch project URL (e.g., https://your-project-name.glitch.me)
 
 // Game Constants
 const ROWS = 20;
@@ -90,13 +97,51 @@ socket.onclose = (event) => {
   console.log("Disconnected from the game server");
   if (!event.wasClean) {
     console.warn("Connection closed unexpectedly");
+    enableSinglePlayerMode();
   }
 };
 
 // Connection error
 socket.onerror = (error) => {
   console.error("WebSocket error:", error);
+  enableSinglePlayerMode();
 };
+
+/**
+ * Enables single-player mode when WebSocket connection fails
+ */
+function enableSinglePlayerMode() {
+  // Display a notification to the user
+  const notification = document.createElement("div");
+  notification.className = "notification";
+  notification.innerHTML = `
+    <p>Unable to connect to multiplayer server.</p>
+    <p>You can continue playing in single-player mode.</p>
+  `;
+  notification.style.cssText = `
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(255, 0, 0, 0.7);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    z-index: 1000;
+    text-align: center;
+  `;
+
+  document.body.appendChild(notification);
+
+  // Remove the notification after 5 seconds
+  setTimeout(() => {
+    notification.style.opacity = "0";
+    setTimeout(() => notification.remove(), 1000);
+  }, 5000);
+
+  // Set a flag indicating we're in single-player mode
+  window.singlePlayerMode = true;
+}
 
 // Helper function to send messages to the server
 function sendMessage(message) {
@@ -104,6 +149,7 @@ function sendMessage(message) {
     socket.send(JSON.stringify(message));
   } else {
     console.warn("Cannot send message, WebSocket is not connected");
+    // In single-player mode, don't try to send messages
   }
 }
 
@@ -478,11 +524,13 @@ function drawPiece(ctx, piece, x, y) {
  * Move the current piece down by one row (gravity)
  */
 function dropPiece() {
-  if (isValidMove(currentPiece, currentX, currentY + 1)) {
-    currentY++;
-  } else {
-    // Can't move down anymore, lock piece in place
-    lockPiece();
+  // Send drop piece message to server
+  sendMessage({ type: "dropPiece" });
+
+  // In single player mode, handle the drop locally
+  if (window.singlePlayerMode || true) {
+    // Always handle locally for responsiveness
+    moveDown();
   }
 }
 
@@ -490,11 +538,15 @@ function dropPiece() {
  * Move the current piece left
  */
 function moveLeft() {
-  if (isValidMove(currentPiece, currentX - 1, currentY)) {
-    currentX--;
+  // Send move left message to server
+  sendMessage({ type: "moveLeft" });
 
-    // Send move message to server
-    sendMessage({ type: "move", direction: "left" });
+  // Single player mode or for smoother gameplay, handle the move locally as well
+  if (window.singlePlayerMode || true) {
+    // Always handle locally for responsiveness
+    if (isValidMove(currentPiece, currentX - 1, currentY)) {
+      currentX--;
+    }
   }
 }
 
@@ -502,11 +554,15 @@ function moveLeft() {
  * Move the current piece right
  */
 function moveRight() {
-  if (isValidMove(currentPiece, currentX + 1, currentY)) {
-    currentX++;
+  // Send move right message to server
+  sendMessage({ type: "moveRight" });
 
-    // Send move message to server
-    sendMessage({ type: "move", direction: "right" });
+  // Single player mode or for smoother gameplay, handle the move locally as well
+  if (window.singlePlayerMode || true) {
+    // Always handle locally for responsiveness
+    if (isValidMove(currentPiece, currentX + 1, currentY)) {
+      currentX++;
+    }
   }
 }
 
@@ -514,17 +570,37 @@ function moveRight() {
  * Move the current piece down (fast drop)
  */
 function moveDown() {
-  if (isValidMove(currentPiece, currentX, currentY + 1)) {
-    currentY++;
+  // Send move down message to server
+  sendMessage({ type: "moveDown" });
 
-    // Send move message to server
-    sendMessage({ type: "move", direction: "down" });
-  } else {
-    // If can't move down, lock piece in place
-    lockPiece();
+  // Single player mode or for smoother gameplay, handle the move locally as well
+  if (window.singlePlayerMode || true) {
+    // Always handle locally for responsiveness
+    if (isValidMove(currentPiece, currentX, currentY + 1)) {
+      currentY++;
+    } else {
+      // Lock the piece in place if it can't move down
+      lockPiece();
 
-    // Send lock message to server
-    sendMessage({ type: "lock" });
+      // Clear any completed lines
+      const linesCleared = checkLines();
+
+      // Update score
+      if (linesCleared > 0) {
+        score += SCORE_VALUES[linesCleared] || 0;
+      }
+
+      // Create a new piece
+      currentPiece = getRandomPiece();
+      currentX =
+        Math.floor(COLS / 2) - Math.floor(currentPiece.shape[0].length / 2);
+      currentY = 0;
+
+      // Check for game over (if the new piece doesn't fit)
+      if (!isValidMove(currentPiece, currentX, currentY)) {
+        gameStarted = false;
+      }
+    }
   }
 }
 
@@ -535,8 +611,36 @@ function rotatePiece() {
   // Send rotate message to server
   sendMessage({ type: "rotate" });
 
-  // You can keep local rotation logic for smoother gameplay
-  // but ultimate validation will happen on the server
+  // Single player mode or for smoother gameplay, handle rotation locally
+  if (window.singlePlayerMode || true) {
+    // Always handle locally for responsiveness
+    // Create a copy of the current piece
+    const originalPiece = { ...currentPiece };
+
+    // Create a rotated shape (transpose then reverse rows)
+    const rows = currentPiece.shape.length;
+    const cols = currentPiece.shape[0].length;
+
+    // Create a new empty shape with swapped dimensions
+    const rotatedShape = Array.from({ length: cols }, () =>
+      Array(rows).fill(0)
+    );
+
+    // Transpose and reverse rows (90-degree rotation)
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        rotatedShape[c][rows - 1 - r] = currentPiece.shape[r][c];
+      }
+    }
+
+    // Update the shape
+    currentPiece.shape = rotatedShape;
+
+    // Revert if the rotation is invalid
+    if (!isValidMove(currentPiece, currentX, currentY)) {
+      currentPiece = originalPiece;
+    }
+  }
 }
 
 /**
@@ -608,6 +712,24 @@ function gameLoop(timestamp) {
 
 // Add event listener for keyboard input
 document.addEventListener("keydown", handleKeyPress);
+
+/**
+ * Connects to the WebSocket server
+ * Sets up the game in either multiplayer or single-player mode
+ */
+function connectToServer() {
+  // Start game immediately in single-player mode if websocket connection fails
+  if (socket.readyState !== WebSocket.OPEN) {
+    console.log("No WebSocket connection, starting in single-player mode");
+    window.singlePlayerMode = true;
+    gameStarted = true;
+  } else {
+    console.log("WebSocket connection initialized");
+    // In multiplayer mode, we wait for the server to send us game state
+    sendMessage({ type: "requestGameStart" });
+    gameStarted = true;
+  }
+}
 
 // Initialize game
 initializeBoard();
