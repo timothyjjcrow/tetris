@@ -75,9 +75,14 @@ const socket = new WebSocket(WEBSOCKET_URL);
 // Connection opened
 socket.onopen = (event) => {
   console.log("Connected to the game server");
+  console.log("WebSocket ready state after connection:", socket.readyState);
+  console.log("WebSocket URL:", WEBSOCKET_URL);
 
   // Enable the menu buttons once connection is established
-  if (createGameBtn) createGameBtn.disabled = false;
+  if (createGameBtn) {
+    console.log("Enabling Create Game button");
+    createGameBtn.disabled = false;
+  }
   if (joinGameBtn) joinGameBtn.disabled = false;
   if (singlePlayerBtn) singlePlayerBtn.disabled = false;
 };
@@ -299,15 +304,25 @@ function initializeGame() {
 
 // Helper function to send messages to the server
 function sendMessage(message) {
+  console.log("Attempting to send message:", message);
+
   // Don't attempt to send messages in single-player mode
   if (window.singlePlayerMode) {
+    console.log("Not sending message - in single-player mode");
     return;
   }
 
   if (socket && socket.readyState === WebSocket.OPEN) {
+    console.log("WebSocket is open, sending message");
     socket.send(JSON.stringify(message));
+    console.log("Message sent successfully");
   } else {
     console.warn("Cannot send message, WebSocket is not connected");
+    console.log(
+      "Current WebSocket readyState:",
+      socket ? socket.readyState : "socket is null"
+    );
+
     // If we get here and single-player mode isn't set, enable it
     if (!window.singlePlayerMode) {
       console.log("Switching to single-player mode due to connection issues");
@@ -320,9 +335,16 @@ function sendMessage(message) {
 function initializeUIListeners() {
   // Create Game button
   if (createGameBtn) {
+    console.log("Adding event listener to Create Game button");
     createGameBtn.addEventListener("click", () => {
+      console.log("Create Game button clicked");
+      console.log("Current WebSocket readyState:", socket.readyState);
+      console.log("Single player mode:", window.singlePlayerMode);
+
       sendMessage({ type: "createGame" });
     });
+  } else {
+    console.error("Create Game button not found in the DOM");
   }
 
   // Join Game button
@@ -406,6 +428,10 @@ canvas.height = ROWS * BLOCK_SIZE;
 
 // Initialize UI event listeners
 initializeUIListeners();
+
+// Explicitly connect to server after UI initialization
+console.log("Calling connectToServer after UI initialization");
+connectToServer();
 
 // Tetromino Definitions
 const TETROMINOES = {
