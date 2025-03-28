@@ -12,6 +12,22 @@
     />
   </head>
   <body>
+    <script>
+      // Debug script to check DOM elements
+      window.addEventListener("DOMContentLoaded", function () {
+        console.log("DOM fully loaded");
+        console.log("Menu screen:", document.getElementById("menu-screen"));
+        console.log(
+          "Waiting screen:",
+          document.getElementById("waiting-screen")
+        );
+        console.log("Game screen:", document.getElementById("game-screen"));
+        console.log(
+          "Create game button:",
+          document.getElementById("createGameBtn")
+        );
+      });
+    </script>
     <div class="game-container">
       <div id="menu-screen" class="menu-screen">
         <h1>Multiplayer Tetris</h1>

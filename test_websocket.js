@@ -1,26 +1,39 @@
+// WebSocket Test Script
 const WebSocket = require("ws");
-const ws = new WebSocket("ws://localhost:8080");
 
-ws.on("open", function open() {
+// Connect to server
+const ws = new WebSocket("wss://repeated-fair-calendula.glitch.me");
+
+ws.on("open", () => {
   console.log("Connected to server");
-  const testPlayer = {
-    type: "playerAction",
-    action: "moveLeft",
-    playerId: "test123",
-  };
-  ws.send(JSON.stringify(testPlayer));
+
+  // Send a createGame message
+  const message = { type: "createGame" };
+  ws.send(JSON.stringify(message));
+  console.log("Sent message:", message);
 });
 
-ws.on("message", function incoming(data) {
-  console.log("Received: %s", data);
+ws.on("message", (data) => {
+  try {
+    const message = JSON.parse(data);
+    console.log("Received response:", message);
+  } catch (error) {
+    console.error("Error parsing message:", error);
+    console.log("Raw message:", data.toString());
+  }
 });
 
-ws.on("error", function error(err) {
-  console.error("WebSocket error: %s", err);
+ws.on("error", (error) => {
+  console.error("WebSocket error:", error);
 });
 
-// Keep connection open for a few seconds
+ws.on("close", (code, reason) => {
+  console.log(`Connection closed: ${code} - ${reason || "No reason"}`);
+});
+
+// Keep the script running for a while
 setTimeout(() => {
+  console.log("Test complete, closing connection");
   ws.close();
-  console.log("Connection closed");
+  process.exit(0);
 }, 5000);

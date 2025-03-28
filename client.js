@@ -106,23 +106,31 @@ socket.onerror = (error) => {
 
 // Listen for messages from the server
 socket.onmessage = (event) => {
+  console.log("Raw message received:", event.data);
+
   try {
     const message = JSON.parse(event.data);
-    console.log("Received from server:", message);
+    console.log("Parsed message from server:", message);
+    console.log("Message type:", message.type);
 
     // Handle different message types
     switch (message.type) {
       case "welcome":
         // Store player ID
         playerId = message.id;
+        console.log("Received welcome message, player ID:", playerId);
         break;
 
       case "gameCreated":
         // Handle new game created
+        console.log("Game created message received!");
         gameCode = message.gameCode;
         isHost = message.isHost;
         isWaitingForOpponent = true;
+        console.log(`Game code: ${gameCode}, isHost: ${isHost}`);
+        console.log("About to show waiting screen");
         showWaitingScreen(gameCode);
+        console.log("Waiting screen should now be visible");
         break;
 
       case "gameJoined":
@@ -220,12 +228,38 @@ function showNotification(message, type = "info") {
  * @param {string} code - The game code to display
  */
 function showWaitingScreen(code) {
-  if (menuScreen) menuScreen.classList.add("hidden");
-  if (waitingScreen) {
-    waitingScreen.classList.remove("hidden");
-    if (gameCodeDisplay) gameCodeDisplay.textContent = code;
+  console.log(`showWaitingScreen called with code: ${code}`);
+  console.log(`menuScreen element:`, menuScreen);
+  console.log(`waitingScreen element:`, waitingScreen);
+  console.log(`gameScreen element:`, gameScreen);
+
+  if (menuScreen) {
+    console.log("Hiding menu screen");
+    menuScreen.classList.add("hidden");
+  } else {
+    console.error("Menu screen element not found!");
   }
-  if (gameScreen) gameScreen.classList.add("hidden");
+
+  if (waitingScreen) {
+    console.log("Showing waiting screen");
+    waitingScreen.classList.remove("hidden");
+
+    if (gameCodeDisplay) {
+      console.log(`Setting game code display to: ${code}`);
+      gameCodeDisplay.textContent = code;
+    } else {
+      console.error("Game code display element not found!");
+    }
+  } else {
+    console.error("Waiting screen element not found!");
+  }
+
+  if (gameScreen) {
+    console.log("Hiding game screen");
+    gameScreen.classList.add("hidden");
+  } else {
+    console.error("Game screen element not found!");
+  }
 }
 
 /**
