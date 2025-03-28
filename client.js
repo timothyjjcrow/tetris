@@ -97,6 +97,7 @@ socket.onclose = (event) => {
   console.log("Disconnected from the game server");
   if (!event.wasClean) {
     console.warn("Connection closed unexpectedly");
+    window.singlePlayerMode = true; // Immediately set single-player mode
     enableSinglePlayerMode();
   }
 };
@@ -104,6 +105,7 @@ socket.onclose = (event) => {
 // Connection error
 socket.onerror = (error) => {
   console.error("WebSocket error:", error);
+  window.singlePlayerMode = true; // Immediately set single-player mode
   enableSinglePlayerMode();
 };
 
@@ -145,11 +147,20 @@ function enableSinglePlayerMode() {
 
 // Helper function to send messages to the server
 function sendMessage(message) {
+  // Don't attempt to send messages in single-player mode
+  if (window.singlePlayerMode) {
+    return;
+  }
+
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(message));
   } else {
     console.warn("Cannot send message, WebSocket is not connected");
-    // In single-player mode, don't try to send messages
+    // If we get here and single-player mode isn't set, enable it
+    if (!window.singlePlayerMode) {
+      console.log("Switching to single-player mode due to connection issues");
+      enableSinglePlayerMode();
+    }
   }
 }
 
@@ -718,15 +729,29 @@ document.addEventListener("keydown", handleKeyPress);
  * Sets up the game in either multiplayer or single-player mode
  */
 function connectToServer() {
-  // Start game immediately in single-player mode if websocket connection fails
-  if (socket.readyState !== WebSocket.OPEN) {
-    console.log("No WebSocket connection, starting in single-player mode");
-    window.singlePlayerMode = true;
-    gameStarted = true;
-  } else {
+  // Check if WebSocket is actually open before trying to use it
+  if (socket.readyState === WebSocket.OPEN) {
     console.log("WebSocket connection initialized");
     // In multiplayer mode, we wait for the server to send us game state
     sendMessage({ type: "requestGameStart" });
+    gameStarted = true;
+  } else if (socket.readyState === WebSocket.CONNECTING) {
+    console.log("WebSocket is connecting, waiting...");
+
+    // Set a timeout to check connection status after 2 seconds
+    setTimeout(() => {
+      if (socket.readyState !== WebSocket.OPEN) {
+        console.log(
+          "WebSocket connection timed out, starting in single-player mode"
+        );
+        window.singlePlayerMode = true;
+        gameStarted = true;
+      }
+    }, 2000);
+  } else {
+    // WebSocket is closed or closing
+    console.log("No WebSocket connection, starting in single-player mode");
+    window.singlePlayerMode = true;
     gameStarted = true;
   }
 }
