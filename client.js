@@ -375,7 +375,26 @@ function initializeUIListeners() {
       console.log("Current WebSocket readyState:", socket.readyState);
       console.log("Single player mode:", window.singlePlayerMode);
 
-      sendMessage({ type: "createGame" });
+      // Check if WebSocket is actually open before trying to create game
+      if (socket.readyState === WebSocket.OPEN) {
+        sendMessage({ type: "createGame" });
+
+        // Set a timeout - if we don't get a response within 3 seconds, assume server error
+        setTimeout(() => {
+          if (!isWaitingForOpponent && !gameCode) {
+            showNotification(
+              "Unable to create game. Server may be unavailable. Try single player mode instead.",
+              "error"
+            );
+          }
+        }, 3000);
+      } else {
+        showNotification(
+          "Cannot connect to game server. Try single player mode instead.",
+          "error"
+        );
+        window.singlePlayerMode = true;
+      }
     });
   } else {
     console.error("Create Game button not found in the DOM");
@@ -386,7 +405,25 @@ function initializeUIListeners() {
     joinGameBtn.addEventListener("click", () => {
       const code = gameCodeInput.value.trim().toUpperCase();
       if (code.length === 6) {
-        sendMessage({ type: "joinGame", gameCode: code });
+        if (socket.readyState === WebSocket.OPEN) {
+          sendMessage({ type: "joinGame", gameCode: code });
+
+          // Set a timeout - if we don't get a response within 3 seconds, assume server error
+          setTimeout(() => {
+            if (!gameCode) {
+              showNotification(
+                "Unable to join game. Server may be unavailable or game code is invalid.",
+                "error"
+              );
+            }
+          }, 3000);
+        } else {
+          showNotification(
+            "Cannot connect to game server. Try single player mode instead.",
+            "error"
+          );
+          window.singlePlayerMode = true;
+        }
       } else {
         showNotification("Please enter a valid 6-character game code", "error");
       }

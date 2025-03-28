@@ -1,0 +1,16 @@
+{
+  "name": "multiplayer-tetris-server",
+  "version": "1.0.0",
+  "description": "WebSocket server for multiplayer Tetris",
+  "main": "simple-server.js",
+  "scripts": {
+    "start": "node simple-server.js"
+  },
+  "engines": {
+    "node": "16.x"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.13.0"
+  }
+}
